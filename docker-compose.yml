@@ -23,7 +23,7 @@ services:
 
   n8n:
     build:
-      context: .
+      context: ./n8n
       args:
         - N8N_VERSION=${N8N_VERSION:-latest}
     restart: always
