@@ -1,7 +1,7 @@
 services:
   traefik:
     image: "traefik"
-    restart: always
+    restart: unless-stopped
     command:
       - "--api=true"
       - "--api.insecure=true"
@@ -21,12 +21,19 @@ services:
       - ${DATA_FOLDER}/letsencrypt:/letsencrypt
       - /var/run/docker.sock:/var/run/docker.sock:ro
 
+  tunnel:
+    container_name: cloudflared-tunnel
+    image: cloudflare/cloudflared
+    restart: unless-stopped
+    command: tunnel run
+    environment:
+      - TUNNEL_TOKEN=${CLOUDFLARE_TUNNEL_TOKEN}
   n8n:
     build:
       context: ./n8n
       args:
         - N8N_VERSION=${N8N_VERSION:-latest}
-    restart: always
+    restart: unless-stopped
     ports:
       - "127.0.0.1:5678:5678"
     labels:
