@@ -26,6 +26,7 @@ x-shared: &shared
     - GENERIC_TIMEZONE=${GENERIC_TIMEZONE}
     - N8N_DIAGNOSTICS_ENABLED=false
     - N8N_HIRING_BANNER_ENABLED=false
+    - N8N_ENCRYPTION_KEY=${N8N_ENCRYPTION_KEY}
   links:
     - postgres
     - redis
