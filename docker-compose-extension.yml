@@ -1,0 +1,49 @@
+x-ollama: &service-ollama
+  image: ollama/ollama:latest
+  container_name: ollama
+  restart: unless-stopped
+  ports:
+    - ${OLLAMA_PORT:-11434}:11434
+  volumes:
+    - ${OLLAMA_VOLUME:-./ollama}:/root/.ollama
+  tty: true
+
+services:
+  flowise:
+    image: flowiseai/flowise
+    restart: unless-stopped
+    environment:
+      - PORT=3001
+    ports:
+      - ${FLOWISE_PORT:-3001}:3001
+    volumes:
+      - ${FLOWISE_VOLUME}:/root/.flowise
+    entrypoint: /bin/sh -c "sleep 3; flowise start"
+  open-webui:
+    image: ghcr.io/open-webui/open-webui:main
+    restart: unless-stopped
+    ports:
+      - "${OPEN_WEBUI_PORT:-3000}:8080"
+    volumes:
+      - ${OPEN_WEBUI_VOLUME}:/app/backend/data
+  qdrant:
+    image: qdrant/qdrant
+    restart: unless-stopped
+    ports:
+      - ${QDRANT_PORT:-6333}:6333
+    volumes:
+      - ${QDRANT_VOLUME:-./qdrant}:/qdrant/storage
+  ollama-cpu:
+    profiles: ["cpu"]
+    <<: *service-ollama
+  ollama-gpu:
+    profiles: ["gpu-nvidia"]
+    <<: *service-ollama
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+
