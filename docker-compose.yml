@@ -32,11 +32,6 @@ x-shared: &shared
       condition: service_healthy
     postgres:
       condition: service_healthy
-  # healthcheck:
-  #   test: [ "CMD-SHELL", "/usr/bin/wget --server-response --proxy off --no-verbose --tries=1 --timeout=3 127.0.0.1:5678/healthz -O /dev/null 2>&1 | grep -q 'HTTP/1.1 200 OK'" ]
-  #   interval: 30s
-  #   timeout: 10s
-  #   retries: 3
 
 services:
   tunnel:
@@ -50,39 +45,6 @@ services:
       - n8n
     labels:
       - com.centurylinklabs.watchtower.enable=true
-
-  watchtower:
-    image: containrrr/watchtower
-    environment:
-      TZ: ${GENERIC_TIMEZONE}
-      WATCHTOWER_CLEANUP: ${WATCHTOWER_CLEANUP:-"true"}
-      WATCHTOWER_POLL_INTERVAL: ${WATCHTOWER_POLL_INTERVAL:-86400} # 24 hr
-      WATCHTOWER_LABEL_ENABLE: ${WATCHTOWER_LABEL_ENABLE:-"false"}
-      WATCHTOWER_ROLLING_RESTART: ${WATCHTOWER_ROLLING_RESTART:-"false"}
-      WATCHTOWER_NOTIFICATION_REPORT: ${WATCHTOWER_NOTIFICATION_REPORT:-"false"}
-      WATCHTOWER_NOTIFICATION_URL: ${WATCHTOWER_NOTIFICATION_URL:-'discord://'}
-      WATCHTOWER_NOTIFICATION_TEMPLATE: |
-        {{- if .Report -}}
-          {{- with .Report -}}
-        {{len .Scanned}} Scanned, {{len .Updated}} Updated, {{len .Failed}} Failed
-              {{- range .Updated}}
-        - {{.Name}} ({{.ImageName}}): {{.CurrentImageID.ShortID}} updated to {{.LatestImageID.ShortID}}
-              {{- end -}}
-              {{- range .Fresh}}
-        - {{.Name}} ({{.ImageName}}): {{.State}}
-            {{- end -}}
-            {{- range .Skipped}}
-        - {{.Name}} ({{.ImageName}}): {{.State}}: {{.Error}}
-            {{- end -}}
-            {{- range .Failed}}
-        - {{.Name}} ({{.ImageName}}): {{.State}}: {{.Error}}
-            {{- end -}}
-          {{- end -}}
-        {{- else -}}
-          {{range .Entries -}}{{.Message}}{{"\n"}}{{- end -}}
-        {{- end -}}
-    volumes:
-      - /var/run/docker.sock:/var/run/docker.sock
 
   postgres:
     image: postgres:16
