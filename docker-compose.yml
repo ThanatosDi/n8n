@@ -45,7 +45,16 @@ services:
       - n8n
     labels:
       - com.centurylinklabs.watchtower.enable=true
-
+  watchtower:
+    image: containrrr/watchtower:latest
+    environment:
+      - TZ=${GENERIC_TIMEZONE}
+      - WATCHTOWER_POLL_INTERVAL=${POLL_INTERVAL:-86400}
+      - WATCHTOWER_LABEL_ENABLE=true
+      - WATCHTOWER_NO_STARTUP_MESSAGE=true
+      - WATCHTOWER_ROLLING_RESTART=true
+    volumes:
+      - ${DOCKER_SOCKET:-/var/run/docker.sock}:/var/run/docker.sock
   postgres:
     image: postgres:16
     restart: always
@@ -63,7 +72,6 @@ services:
       interval: 5s
       timeout: 5s
       retries: 10
-
   redis:
     image: redis:6-alpine
     restart: always
@@ -74,12 +82,10 @@ services:
       interval: 5s
       timeout: 5s
       retries: 10
-
   n8n:
     <<: *shared
     ports:
       - 127.0.0.1:5678:5678
-
   n8n-worker:
     <<: *shared
     command: worker
