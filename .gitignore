@@ -1,7 +1,8 @@
+n8n/*
 ./n8n/*
 !./n8n/.gitkeep
 .env
-
+.*
 ./n8n/app
 ./n8n/postgresql
 ./n8n/redis
