@@ -98,7 +98,7 @@ services:
       POSTGRES_NON_ROOT_USER: ${POSTGRES_NON_ROOT_USER}
       POSTGRES_NON_ROOT_PASSWORD: ${POSTGRES_NON_ROOT_PASSWORD}
     volumes:
-      - ./n8n/postgresql:/var/lib/postgresql/data
+      - postgres-data:/var/lib/postgresql/data
       - ./init-data.sh:/docker-entrypoint-initdb.d/init-data.sh
     healthcheck:
       test: [ 'CMD-SHELL', 'pg_isready -h localhost -U ${POSTGRES_NON_ROOT_USER} -d ${POSTGRES_DB}' ]
@@ -164,3 +164,12 @@ services:
     network_mode: "service:worker-2"
     depends_on:
       - worker-2
+
+volumes:
+  postgres-data:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: ${POSTGRES_DATA_PATH}
+
