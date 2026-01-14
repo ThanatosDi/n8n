@@ -40,6 +40,8 @@ x-common-env: &common-env
 x-shared: &shared
   restart: unless-stopped
   image: docker.n8n.io/n8nio/n8n:${N8N_VERSION:-latest}
+  extra_hosts:
+      - host.docker.internal:host-gateway
   links:
     - postgres
     - redis
@@ -56,6 +58,8 @@ x-shared: &shared
       condition: service_healthy
     postgres:
       condition: service_healthy
+  labels:
+    - com.centurylinklabs.watchtower.enable=true
 
 # Runner 的建置設定
 x-runner: &runner
@@ -76,6 +80,8 @@ x-runner: &runner
     N8N_RUNNERS_TASK_BROKER_URI: http://localhost:5679
     N8N_RUNNERS_AUTH_TOKEN: ${N8N_RUNNERS_AUTH_TOKEN}
     N8N_ENCRYPTION_KEY: ${N8N_ENCRYPTION_KEY}
+  labels:
+    - com.centurylinklabs.watchtower.enable=true
 
 # Worker + Runner 配對模板
 x-worker: &worker
