@@ -1,0 +1,166 @@
+# 定義共用的環境變數 (改用 Map 格式以支援合併)
+x-common-env: &common-env
+  NODE_ENV: production
+  GENERIC_TIMEZONE: "${GENERIC_TIMEZONE}"
+
+  # 資料庫
+  DB_TYPE: postgresdb
+  DB_POSTGRESDB_HOST: postgres
+  DB_POSTGRESDB_PORT: 5432
+  DB_POSTGRESDB_DATABASE: ${POSTGRES_DB}
+  DB_POSTGRESDB_USER: ${POSTGRES_NON_ROOT_USER}
+  DB_POSTGRESDB_PASSWORD: ${POSTGRES_NON_ROOT_PASSWORD}
+
+  # 部署與安全
+  N8N_PROTOCOL: https
+  N8N_HOST: ${DOMAIN_NAME}
+  N8N_PATH: ${N8N_PATH}
+  N8N_DIAGNOSTICS_ENABLED: "false"
+  N8N_HIRING_BANNER_ENABLED: "false"
+  N8N_ENCRYPTION_KEY: ${N8N_ENCRYPTION_KEY}
+  WEBHOOK_URL: https://${DOMAIN_NAME}${N8N_PATH}
+
+  # Runner 基礎設定
+  N8N_RUNNERS_ENABLED: "true"
+  N8N_RUNNERS_MODE: external
+  N8N_RUNNERS_AUTH_TOKEN: ${N8N_RUNNERS_AUTH_TOKEN}
+  N8N_NATIVE_PYTHON_RUNNER: "true"
+
+  # Task Broker 設定 (每個 n8n instance 都需要啟用)
+  N8N_TASK_BROKERS_ENABLED: "true"
+  N8N_RUNNERS_BROKER_LISTEN_ADDRESS: "0.0.0.0"
+
+  # 佇列模式
+  EXECUTIONS_MODE: queue
+  OFFLOAD_MANUAL_EXECUTIONS_TO_WORKERS: "true"
+  QUEUE_BULL_REDIS_HOST: redis
+  QUEUE_HEALTH_CHECK_ACTIVE: "true"
+
+# 定義共用的服務設定
+x-shared: &shared
+  restart: unless-stopped
+  image: docker.n8n.io/n8nio/n8n:${N8N_VERSION:-latest}
+  links:
+    - postgres
+    - redis
+  volumes:
+    - ./n8n/app:/home/node/.n8n
+  healthcheck:
+    test: wget --spider http://localhost:5678/healthz > /dev/null 2>&1 || exit 1
+    interval: 30s
+    timeout: 10s
+    retries: 3
+    start_period: 1m00s
+  depends_on:
+    redis:
+      condition: service_healthy
+    postgres:
+      condition: service_healthy
+
+# Runner 的建置設定
+x-runner: &runner
+  image: n8nio/runners:${N8N_RUNNERS_VERSION:-latest}
+  build:
+    context: runner
+    dockerfile: Dockerfile
+    target: runner
+    args:
+      - N8N_RUNNERS_VERSION=${N8N_RUNNERS_VERSION:-latest}
+      - NODE_INSTALL=${NODE_INSTALL:-}
+      - PYTHON_INSTALL=${PYTHON_INSTALL:-}
+      - NODE_BUILTIN=${NODE_BUILTIN:-crypt}
+      - PYTHON_STDLIB=${PYTHON_STDLIB:-json}
+  restart: unless-stopped
+  environment:
+    # 使用 localhost 因為會透過 network_mode 共用網路命名空間
+    N8N_RUNNERS_TASK_BROKER_URI: http://localhost:5679
+    N8N_RUNNERS_AUTH_TOKEN: ${N8N_RUNNERS_AUTH_TOKEN}
+    N8N_ENCRYPTION_KEY: ${N8N_ENCRYPTION_KEY}
+
+# Worker + Runner 配對模板
+x-worker: &worker
+  <<: *shared
+  command: worker
+  environment:
+    <<: *common-env
+
+x-worker-runner: &worker-runner
+  <<: *runner
+
+services:
+  postgres:
+    image: postgres:${POSTGRES_VERSION:-18-alpine}
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_NON_ROOT_USER: ${POSTGRES_NON_ROOT_USER}
+      POSTGRES_NON_ROOT_PASSWORD: ${POSTGRES_NON_ROOT_PASSWORD}
+    volumes:
+      - ./n8n/postgresql:/var/lib/postgresql/data
+      - ./init-data.sh:/docker-entrypoint-initdb.d/init-data.sh
+    healthcheck:
+      test: [ 'CMD-SHELL', 'pg_isready -h localhost -U ${POSTGRES_NON_ROOT_USER} -d ${POSTGRES_DB}' ]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:8-alpine
+    restart: unless-stopped
+    volumes:
+      - ./n8n/redis:/data
+    healthcheck:
+      test: [ 'CMD', 'redis-cli', 'ping' ]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    deploy:
+      resources:
+        limits:
+          memory: ${REDIS_MAX_MEMORY:-512M}
+    command: redis-server --save "" --appendonly no
+
+  # ============================================
+  # Main Instance (主節點)
+  # ============================================
+  n8n:
+    <<: *shared
+    ports:
+      - "127.0.0.1:5678:5678"
+    environment:
+      <<: *common-env
+
+  # Main 的 Runner sidecar (共用 n8n 的網路命名空間)
+  runner-main:
+    <<: *runner
+    network_mode: "service:n8n"
+    depends_on:
+      - n8n
+
+  # ============================================
+  # Workers (負責執行 Workflow)
+  # 每個 Worker 都有自己的 Runner sidecar
+  # ============================================
+  worker-1:
+    <<: *worker
+    depends_on:
+      - n8n
+
+  runner-worker-1:
+    <<: *worker-runner
+    network_mode: "service:worker-1"
+    depends_on:
+      - worker-1
+
+  worker-2:
+    <<: *worker
+    depends_on:
+      - n8n
+
+  runner-worker-2:
+    <<: *worker-runner
+    network_mode: "service:worker-2"
+    depends_on:
+      - worker-2
