@@ -137,6 +137,7 @@ services:
   # Main Instance (主節點)
   # ============================================
   n8n:
+    container_name: n8n
     <<: *shared
     ports:
       - "127.0.0.1:5678:5678"
