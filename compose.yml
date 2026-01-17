@@ -1,7 +1,8 @@
 # 定義共用的環境變數 (改用 Map 格式以支援合併)
 x-common-env: &common-env
   NODE_ENV: production
-  GENERIC_TIMEZONE: "${GENERIC_TIMEZONE}"
+  GENERIC_TIMEZONE: ${GENERIC_TIMEZONE}
+  TZ: ${GENERIC_TIMEZONE}
 
   # 資料庫
   DB_TYPE: postgresdb
@@ -46,7 +47,7 @@ x-shared: &shared
     - postgres
     - redis
   volumes:
-    - ./n8n/app:/home/node/.n8n
+    - ${DATA_PATH}/n8n:/home/node/.n8n
   healthcheck:
     test: wget --spider http://localhost:5678/healthz > /dev/null 2>&1 || exit 1
     interval: 30s
@@ -59,7 +60,7 @@ x-shared: &shared
     postgres:
       condition: service_healthy
   labels:
-    - com.centurylinklabs.watchtower.enable=true
+    - ${WATCHTOWER_ENABLE}
 
 # Runner 的建置設定
 x-runner: &runner
@@ -81,7 +82,7 @@ x-runner: &runner
     N8N_RUNNERS_AUTH_TOKEN: ${N8N_RUNNERS_AUTH_TOKEN}
     N8N_ENCRYPTION_KEY: ${N8N_ENCRYPTION_KEY}
   labels:
-    - com.centurylinklabs.watchtower.enable=true
+    - ${WATCHTOWER_ENABLE}
 
 # Worker + Runner 配對模板
 x-worker: &worker
@@ -97,6 +98,8 @@ services:
   postgres:
     image: postgres:${POSTGRES_VERSION:-18-alpine}
     restart: unless-stopped
+    labels:
+      - ${WATCHTOWER_ENABLE}
     environment:
       POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
@@ -115,8 +118,10 @@ services:
   redis:
     image: redis:8-alpine
     restart: unless-stopped
+    labels:
+      - ${WATCHTOWER_ENABLE}
     volumes:
-      - ./n8n/redis:/data
+      - ${DATA_PATH}/redis:/data
     healthcheck:
       test: [ 'CMD', 'redis-cli', 'ping' ]
       interval: 5s
@@ -177,5 +182,5 @@ volumes:
     driver_opts:
       type: none
       o: bind
-      device: ${POSTGRES_DATA_PATH}
+      device: ${DATA_PATH}/postgres
 
