@@ -1,13 +1,13 @@
 # 定義共用的環境變數 (改用 Map 格式以支援合併)
 x-common-env: &common-env
   NODE_ENV: production
-  GENERIC_TIMEZONE: ${GENERIC_TIMEZONE}
-  TZ: ${GENERIC_TIMEZONE}
+  GENERIC_TIMEZONE: "${GENERIC_TIMEZONE}"
+
 
   # 資料庫
   DB_TYPE: postgresdb
   DB_POSTGRESDB_HOST: postgres
-  DB_POSTGRESDB_PORT: 5432
+  DB_POSTGRESDB_PORT: ${POSTGRES_PORT:-5432}
   DB_POSTGRESDB_DATABASE: ${POSTGRES_DB}
   DB_POSTGRESDB_USER: ${POSTGRES_NON_ROOT_USER}
   DB_POSTGRESDB_PASSWORD: ${POSTGRES_NON_ROOT_PASSWORD}
@@ -41,15 +41,13 @@ x-common-env: &common-env
 x-shared: &shared
   restart: unless-stopped
   image: docker.n8n.io/n8nio/n8n:${N8N_VERSION:-latest}
-  extra_hosts:
-      - host.docker.internal:host-gateway
   links:
     - postgres
     - redis
   volumes:
-    - ${DATA_PATH}/n8n:/home/node/.n8n
+    - ./n8n/app:/home/node/.n8n
   healthcheck:
-    test: wget --spider http://localhost:5678/healthz > /dev/null 2>&1 || exit 1
+    test: wget --spider http://localhost:5678/healthz/readiness > /dev/null 2>&1 || exit 1
     interval: 30s
     timeout: 10s
     retries: 3
@@ -59,8 +57,6 @@ x-shared: &shared
       condition: service_healthy
     postgres:
       condition: service_healthy
-  labels:
-    - ${WATCHTOWER_ENABLE}
 
 # Runner 的建置設定
 x-runner: &runner
@@ -81,8 +77,6 @@ x-runner: &runner
     N8N_RUNNERS_TASK_BROKER_URI: http://localhost:5679
     N8N_RUNNERS_AUTH_TOKEN: ${N8N_RUNNERS_AUTH_TOKEN}
     N8N_ENCRYPTION_KEY: ${N8N_ENCRYPTION_KEY}
-  labels:
-    - ${WATCHTOWER_ENABLE}
 
 # Worker + Runner 配對模板
 x-worker: &worker
@@ -95,11 +89,20 @@ x-worker-runner: &worker-runner
   <<: *runner
 
 services:
-  postgres:
-    image: postgres:${POSTGRES_VERSION:-18-alpine}
+  tunnel:
+    image: cloudflare/cloudflared
     restart: unless-stopped
-    labels:
-      - ${WATCHTOWER_ENABLE}
+    command: tunnel --no-autoupdate run
+    environment:
+      TUNNEL_TOKEN: ${CLOUDFLARE_TUNNEL_TOKEN}
+    depends_on:
+      - n8n
+
+  postgres:
+    # 注意：PostgreSQL 18+ 改變了資料目錄結構，需要遷移才能升級
+    # 詳見 https://github.com/docker-library/postgres/pull/1259
+    image: postgres:${POSTGRES_VERSION:-17-alpine}
+    restart: unless-stopped
     environment:
       POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
@@ -107,7 +110,7 @@ services:
       POSTGRES_NON_ROOT_USER: ${POSTGRES_NON_ROOT_USER}
       POSTGRES_NON_ROOT_PASSWORD: ${POSTGRES_NON_ROOT_PASSWORD}
     volumes:
-      - postgres-data:/var/lib/postgresql/data
+      - ./n8n/postgresql:/var/lib/postgresql/data
       - ./init-data.sh:/docker-entrypoint-initdb.d/init-data.sh
     healthcheck:
       test: [ 'CMD-SHELL', 'pg_isready -h localhost -U ${POSTGRES_NON_ROOT_USER} -d ${POSTGRES_DB}' ]
@@ -116,12 +119,10 @@ services:
       retries: 10
 
   redis:
-    image: redis:8-alpine
+    image: redis:${REDIS_VERSION:-8-alpine}
     restart: unless-stopped
-    labels:
-      - ${WATCHTOWER_ENABLE}
     volumes:
-      - ${DATA_PATH}/redis:/data
+      - ./n8n/redis:/data
     healthcheck:
       test: [ 'CMD', 'redis-cli', 'ping' ]
       interval: 5s
@@ -137,7 +138,6 @@ services:
   # Main Instance (主節點)
   # ============================================
   n8n:
-    container_name: n8n
     <<: *shared
     ports:
       - "127.0.0.1:5678:5678"
@@ -149,7 +149,8 @@ services:
     <<: *runner
     network_mode: "service:n8n"
     depends_on:
-      - n8n
+      n8n:
+        condition: service_healthy
 
   # ============================================
   # Workers (負責執行 Workflow)
@@ -158,30 +159,25 @@ services:
   worker-1:
     <<: *worker
     depends_on:
-      - n8n
+      n8n:
+        condition: service_healthy
 
   runner-worker-1:
     <<: *worker-runner
     network_mode: "service:worker-1"
     depends_on:
-      - worker-1
+      worker-1:
+        condition: service_healthy
 
   worker-2:
     <<: *worker
     depends_on:
-      - n8n
+      n8n:
+        condition: service_healthy
 
   runner-worker-2:
     <<: *worker-runner
     network_mode: "service:worker-2"
     depends_on:
-      - worker-2
-
-volumes:
-  postgres-data:
-    driver: local
-    driver_opts:
-      type: none
-      o: bind
-      device: ${DATA_PATH}/postgres
-
+      worker-2:
+        condition: service_healthy
