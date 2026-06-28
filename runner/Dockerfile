@@ -41,6 +41,7 @@ RUN NODE_ALLOW=$(echo "${NODE_INSTALL}" | tr ' ' ',') && \
 				"PATH",
 				"GENERIC_TIMEZONE",
 				"NODE_OPTIONS",
+				"NODE_PATH",
 				"N8N_RUNNERS_AUTO_SHUTDOWN_TIMEOUT",
 				"N8N_RUNNERS_TASK_TIMEOUT",
 				"N8N_RUNNERS_MAX_CONCURRENCY",
@@ -60,7 +61,7 @@ RUN NODE_ALLOW=$(echo "${NODE_INSTALL}" | tr ' ' ',') && \
 			"runner-type": "python",
 			"workdir": "/home/runner",
 			"command": "/opt/runners/task-runner-python/.venv/bin/python",
-			"args": ["-m", "src.main"],
+			"args": ["-I", "-B", "-X", "disable_remote_debug", "-m", "src.main"],
 			"health-check-server-port": "5682",
 			"allowed-env": [
 				"PATH",
