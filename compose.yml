@@ -92,6 +92,8 @@ services:
   tunnel:
     image: cloudflare/cloudflared
     restart: unless-stopped
+    profiles:
+      - tunnel
     command: tunnel --no-autoupdate run
     environment:
       TUNNEL_TOKEN: ${CLOUDFLARE_TUNNEL_TOKEN}
@@ -151,6 +153,7 @@ services:
     depends_on:
       n8n:
         condition: service_healthy
+        restart: true
 
   # ============================================
   # Workers (負責執行 Workflow)
@@ -161,6 +164,7 @@ services:
     depends_on:
       n8n:
         condition: service_healthy
+        restart: true
 
   runner-worker-1:
     <<: *worker-runner
@@ -168,12 +172,14 @@ services:
     depends_on:
       worker-1:
         condition: service_healthy
+        restart: true
 
   worker-2:
     <<: *worker
     depends_on:
       n8n:
         condition: service_healthy
+        restart: true
 
   runner-worker-2:
     <<: *worker-runner
@@ -181,3 +187,4 @@ services:
     depends_on:
       worker-2:
         condition: service_healthy
+        restart: true
